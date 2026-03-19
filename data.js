@@ -19,7 +19,7 @@ const EMPLOYEES = [
     "name": "עודד נריה",
     "locationId": 5,
     "locationName": "טבעון",
-    "imageExt": "jpg"
+    "imageExt": "jfif"
   },
   {
     "employeeId": 4,
@@ -33,7 +33,7 @@ const EMPLOYEES = [
     "name": "ארז פיקסל",
     "locationId": 7,
     "locationName": "גניגר",
-    "imageExt": "jpg"
+    "imageExt": "jfif"
   },
   {
     "employeeId": 6,
@@ -47,7 +47,7 @@ const EMPLOYEES = [
     "name": "רון עברי",
     "locationId": 10,
     "locationName": "שמשית",
-    "imageExt": "jpg"
+    "imageExt": "jfif"
   },
   {
     "employeeId": 8,
