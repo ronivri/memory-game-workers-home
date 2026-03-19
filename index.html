@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>משחק זיכרון – התאמת עובד ליישוב</title>
+<title>משחק זיכרון – התאמת עובד ליישוב (התאמה לפי יישוב)</title>
 <style>
   :root{ --primary:#2563eb; --bg:#f7f7fb; --card:#ffffff; --text:#111827; --muted:#6b7280; }
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Arial,Helvetica,sans-serif;}
@@ -32,7 +32,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="title">משחק זיכרון – התאמת עובד ליישוב</div>
+    <div class="title">משחק זיכרון – התאמת עובד ליישוב (כל קלף תמונת יישוב מתאים לכל עובד מאותו יישוב)</div>
     <button id="restart" class="btn" type="button" aria-label="התחל מחדש">שחק שוב</button>
   </header>
   <div class="bar">
@@ -43,7 +43,7 @@
     </div>
   </div>
   <main id="game" aria-label="לוח המשחק"></main>
-  <p class="footer">התאמה לפי עובד: כל שם עובד תואם לתמונת היישוב של אותו עובד, גם אם יש עוד עובדים מאותו היישוב.</p>
+  <p class="footer">עקרון ההתאמה: *לפי יישוב* – קלף שם עובד תואם לכל קלף תמונת יישוב עם אותו `locationId`. לא ניתן להתאים טקסט‑טקסט או תמונה‑תמונה.</p>
 </div>
 <script src="data.js"></script>
 <script>
@@ -62,12 +62,39 @@
   function stopTimer(){ clearInterval(timerId); timerId = null; }
   function updateStats(){ movesEl.textContent = `🎯 ניסיונות: ${moves}`; foundEl.textContent = `✅ נמצאו: ${foundPairs}/${totalPairs}`; }
 
+  // שינוי מרכזי: התאמה לפי יישוב (groupKey = locationId) ולא לפי עובד
   function buildDeck(){
     const deck = [];
     EMPLOYEES.forEach(e=>{
-      const matchKey = `emp-${e.employeeId}`;
-      deck.push({ type:'text', matchKey, render:(el)=>{ const div = document.createElement('div'); div.className='content text-card'; div.textContent=e.name; el.appendChild(div); } });
-      deck.push({ type:'image', matchKey, render:(el)=>{ const div = document.createElement('div'); div.className='content image-card'; const img=document.createElement('img'); const ext=(e.imageExt||'jpg').toLowerCase(); img.src=`images/${e.locationId}.${ext}`; img.alt = e.locationName ? `תמונת יישוב: ${e.locationName}` : 'תמונת יישוב'; div.appendChild(img); el.appendChild(div); } });
+      const groupKey = `loc-${e.locationId}`; // משותף לכל מי שגר באותו יישוב
+
+      // קלף טקסט (שם עובד)
+      deck.push({
+        type:'text',
+        groupKey,
+        render:(el)=>{
+          const div = document.createElement('div');
+          div.className='content text-card';
+          div.textContent=e.name;
+          el.appendChild(div);
+        }
+      });
+
+      // קלף תמונה (יישוב) – אפשר להופיע כמה פעמים אם יש כמה עובדים באותו יישוב
+      deck.push({
+        type:'image',
+        groupKey,
+        render:(el)=>{
+          const div = document.createElement('div');
+          div.className='content image-card';
+          const img=document.createElement('img');
+          const ext=(e.imageExt||'jpg').toLowerCase();
+          img.src=`images/${e.locationId}.${ext}`;
+          img.alt = e.locationName ? `תמונת יישוב: ${e.locationName}` : 'תמונת יישוב';
+          div.appendChild(img);
+          el.appendChild(div);
+        }
+      });
     });
     return deck;
   }
@@ -77,12 +104,13 @@
   function renderBoard(){
     gameEl.innerHTML='';
     const deck = shuffle(buildDeck());
-    totalPairs = EMPLOYEES.length;
+    totalPairs = EMPLOYEES.length; // מספר קלפי שמות (כל שם צריך בן‑זוג תמונה)
     deck.forEach(data=>{
       const btn=document.createElement('button');
       btn.type='button';
       btn.className='card';
-      btn.dataset.matchKey=data.matchKey;
+      btn.dataset.groupKey=data.groupKey; // המפתח המשותף ליישוב
+      btn.dataset.type=data.type;        // 'text' | 'image'
       btn.dataset.open='false';
       btn.setAttribute('aria-label','קלף סגור');
       btn.addEventListener('click', ()=> flip(btn, data));
@@ -100,7 +128,11 @@
     openCard(card, data);
     if (!firstCard){ firstCard=card; return; }
     moves++; updateStats();
-    const isMatch = (firstCard.dataset.matchKey===card.dataset.matchKey) && (firstCard!==card);
+
+    // ההתאמה חוקית אם: אותו יישוב (groupKey) וסוגים שונים (טקסט מול תמונה)
+    const isMatch = (firstCard.dataset.groupKey===card.dataset.groupKey)
+                    && (firstCard.dataset.type !== card.dataset.type);
+
     if (isMatch){
       firstCard.classList.add('matched'); card.classList.add('matched');
       firstCard.setAttribute('aria-label','קלף תואם'); card.setAttribute('aria-label','קלף תואם');
