@@ -1,0 +1,120 @@
+
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>משחק זיכרון – התאמת עובד ליישוב</title>
+<style>
+  :root{ --primary:#2563eb; --bg:#f7f7fb; --card:#ffffff; --text:#111827; --muted:#6b7280; }
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Arial,Helvetica,sans-serif;}
+  .wrap{max-width:720px;margin:0 auto;padding:16px;}
+  header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin:12px 0 8px;}
+  .title{font-weight:700;font-size:1.25rem;}
+  .stats{display:flex;gap:12px;color:var(--muted);font-size:.95rem;}
+  .pill{background:#e5e7eb;border-radius:999px;padding:4px 10px;color:#374151}
+  .btn{appearance:none;border:0;background:var(--primary);color:#fff;padding:8px 14px;border-radius:12px;font-weight:600;cursor:pointer}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  #game{ display:grid; gap:10px; grid-template-columns: repeat(auto-fill,minmax(100px,1fr)); }
+  @media (min-width:480px){ #game{ gap:12px; grid-template-columns: repeat(auto-fill,minmax(120px,1fr)); } }
+  .card{ position:relative; height:120px; background:var(--card); border-radius:16px; box-shadow:0 2px 8px rgba(0,0,0,.07); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:transform .08s ease, box-shadow .2s ease; border:2px solid transparent; }
+  .card:focus{outline:none; box-shadow:0 0 0 3px rgba(37,99,235,.35);} 
+  .card:not(.open):not(.matched):active{transform:scale(.98)}
+  .card.open, .card.matched{border-color:#d1d5db}
+  .content{padding:8px; text-align:center}
+  .text-card{font-weight:700; font-size:1rem; line-height:1.25; color:#111827}
+  .image-card img{max-width:92%; max-height:92%; object-fit:contain; border-radius:10px}
+  .matched{background:#ecfdf5; border-color:#a7f3d0}
+  .bar{display:flex; justify-content:space-between; align-items:center; margin:10px 0 16px}
+  .footer{margin-top:14px; color:var(--muted); font-size:.9rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title">משחק זיכרון – התאמת עובד ליישוב</div>
+    <button id="restart" class="btn" type="button" aria-label="התחל מחדש">שחק שוב</button>
+  </header>
+  <div class="bar">
+    <div class="stats">
+      <span class="pill" id="timer" aria-live="polite">⏱️ 00:00</span>
+      <span class="pill" id="moves" aria-live="polite">🎯 ניסיונות: 0</span>
+      <span class="pill" id="found" aria-live="polite">✅ נמצאו: 0</span>
+    </div>
+  </div>
+  <main id="game" aria-label="לוח המשחק"></main>
+  <p class="footer">התאמה לפי עובד: כל שם עובד תואם לתמונת היישוב של אותו עובד, גם אם יש עוד עובדים מאותו היישוב.</p>
+</div>
+<script src="data.js"></script>
+<script>
+  const gameEl = document.getElementById('game');
+  const restartBtn = document.getElementById('restart');
+  const timerEl = document.getElementById('timer');
+  const movesEl  = document.getElementById('moves');
+  const foundEl  = document.getElementById('found');
+
+  let firstCard = null, lockBoard = false;
+  let moves = 0, foundPairs = 0, totalPairs = 0;
+  let timerId = null, elapsed = 0, started = false;
+
+  function formatTime(s){ const m = String(Math.floor(s/60)).padStart(2,'0'); const r = String(s%60).padStart(2,'0'); return `${m}:${r}`; }
+  function startTimer(){ if (timerId) return; timerId = setInterval(()=>{ elapsed++; timerEl.textContent = `⏱️ ${formatTime(elapsed)}`; },1000); }
+  function stopTimer(){ clearInterval(timerId); timerId = null; }
+  function updateStats(){ movesEl.textContent = `🎯 ניסיונות: ${moves}`; foundEl.textContent = `✅ נמצאו: ${foundPairs}/${totalPairs}`; }
+
+  function buildDeck(){
+    const deck = [];
+    EMPLOYEES.forEach(e=>{
+      const matchKey = `emp-${e.employeeId}`;
+      deck.push({ type:'text', matchKey, render:(el)=>{ const div = document.createElement('div'); div.className='content text-card'; div.textContent=e.name; el.appendChild(div); } });
+      deck.push({ type:'image', matchKey, render:(el)=>{ const div = document.createElement('div'); div.className='content image-card'; const img=document.createElement('img'); const ext=(e.imageExt||'jpg').toLowerCase(); img.src=`images/${e.locationId}.${ext}`; img.alt = e.locationName ? `תמונת יישוב: ${e.locationName}` : 'תמונת יישוב'; div.appendChild(img); el.appendChild(div); } });
+    });
+    return deck;
+  }
+
+  function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+
+  function renderBoard(){
+    gameEl.innerHTML='';
+    const deck = shuffle(buildDeck());
+    totalPairs = EMPLOYEES.length;
+    deck.forEach(data=>{
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.className='card';
+      btn.dataset.matchKey=data.matchKey;
+      btn.dataset.open='false';
+      btn.setAttribute('aria-label','קלף סגור');
+      btn.addEventListener('click', ()=> flip(btn, data));
+      btn.addEventListener('keydown', (ev)=>{ if (ev.key==='Enter' || ev.key===' '){ ev.preventDefault(); flip(btn, data); } });
+      gameEl.appendChild(btn);
+    });
+  }
+
+  function openCard(card, data){ card.dataset.open='true'; card.classList.add('open'); card.innerHTML=''; data.render(card); }
+  function closeCard(card){ card.dataset.open='false'; card.classList.remove('open'); card.innerHTML=''; card.setAttribute('aria-label','קלף סגור'); }
+
+  function flip(card, data){
+    if (lockBoard || card.dataset.open==='true') return;
+    if (!started){ started=true; startTimer(); }
+    openCard(card, data);
+    if (!firstCard){ firstCard=card; return; }
+    moves++; updateStats();
+    const isMatch = (firstCard.dataset.matchKey===card.dataset.matchKey) && (firstCard!==card);
+    if (isMatch){
+      firstCard.classList.add('matched'); card.classList.add('matched');
+      firstCard.setAttribute('aria-label','קלף תואם'); card.setAttribute('aria-label','קלף תואם');
+      firstCard=null; foundPairs++; updateStats();
+      if (foundPairs===totalPairs){ stopTimer(); setTimeout(()=>alert(`כל הכבוד! סיימת ב-${moves} ניסיונות ובזמן ${formatTime(elapsed)}.`), 60); }
+    } else {
+      lockBoard=true; const a=firstCard, b=card; setTimeout(()=>{ closeCard(a); closeCard(b); firstCard=null; lockBoard=false; }, 900);
+    }
+  }
+
+  function resetGame(){ stopTimer(); elapsed=0; timerEl.textContent='⏱️ 00:00'; moves=0; foundPairs=0; started=false; updateStats(); firstCard=null; lockBoard=false; renderBoard(); }
+
+  document.getElementById('restart').addEventListener('click', resetGame);
+  updateStats(); renderBoard();
+</script>
+</body>
+</html>
